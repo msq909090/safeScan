@@ -1,0 +1,15 @@
+{
+  "name": "safescan-backend",
+  "version": "1.0.0",
+  "description": "Gemini API backend for SafeScan comment moderation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  }
+}

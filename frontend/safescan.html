@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeScan - AI Comment Moderator (Gemini Powered)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .mode-switch {
+            background: rgba(30, 30, 40, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 6px;
+            border-radius: 60px;
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            color: #aaa;
+        }
+        .mode-btn.active { background: #3b82f6; color: white; }
+        .ai-toggle {
+            background: #2a2a35;
+            border-radius: 40px;
+            padding: 4px;
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            width: fit-content;
+        }
+        .ai-option {
+            padding: 8px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .ai-option.active { background: #3b82f6; color: white; }
+        .post-card {
+            background: #1e1e2e;
+            border-radius: 24px;
+            overflow: hidden;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .post-header { display: flex; gap: 12px; padding: 16px 20px; align-items: center; }
+        .avatar {
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        .post-info h3 { color: white; font-size: 16px; }
+        .post-info p { font-size: 12px; color: #888; }
+        .post-thumbnail {
+            width: 100%; height: 200px;
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6, #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 64px;
+        }
+        .post-thumbnail::before { content: "▶️"; font-size: 80px; opacity: 0.8; }
+        .post-title { padding: 20px; font-size: 18px; font-weight: 600; color: white; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: #1e1e2e; border-radius: 20px; padding: 20px; text-align: center; }
+        .stat-number { font-size: 36px; font-weight: bold; }
+        .stat-card.red .stat-number { color: #ef4444; }
+        .stat-card.yellow .stat-number { color: #f59e0b; }
+        .stat-card.green .stat-number { color: #10b981; }
+        .stat-label { font-size: 13px; color: #888; }
+        .comments-section { background: #1e1e2e; border-radius: 20px; padding: 20px; margin-bottom: 24px; }
+        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 20px; color: white; }
+        .comment { padding: 16px; border-radius: 16px; margin-bottom: 12px; }
+        .comment.green { background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; }
+        .comment.yellow { background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; }
+        .comment.red-archive { background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; }
+        .comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .comment-user { font-weight: 600; color: white; }
+        .comment-badge { font-size: 11px; padding: 4px 10px; border-radius: 20px; }
+        .comment-badge.green { background: #10b981; color: white; }
+        .comment-badge.yellow { background: #f59e0b; color: black; }
+        .comment-badge.red { background: #ef4444; color: white; }
+        .comment-text { color: #e0e0e0; line-height: 1.5; }
+        .blurred { filter: blur(5px); cursor: pointer; }
+        .review-actions { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+        .review-btn { padding: 8px 16px; border-radius: 30px; font-size: 13px; cursor: pointer; border: none; }
+        .review-btn.approve { background: #10b981; color: white; }
+        .review-btn.delete { background: #ef4444; color: white; }
+        .review-btn.unblur { background: #3b82f6; color: white; }
+        .test-box { background: #1e1e2e; border-radius: 20px; padding: 20px; margin-bottom: 24px; }
+        textarea { width: 100%; padding: 14px; border-radius: 16px; background: #2a2a35; color: white; border: 1px solid #444; font-family: inherit; }
+        .post-btn { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 40px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+        .ai-feedback { margin-top: 12px; padding: 12px; border-radius: 12px; background: #2a2a35; font-size: 13px; }
+        .graph-container { background: #1e1e2e; border-radius: 20px; padding: 20px; margin-bottom: 24px; }
+        canvas { max-height: 250px; }
+        .insight-text { text-align: center; font-size: 12px; color: #10b981; margin-top: 12px; }
+        .hidden-mode { display: none; }
+        .collapsible-header {
+            background: rgba(239, 68, 68, 0.15);
+            padding: 14px 18px;
+            border-radius: 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+        }
+        .collapsible-content { display: none; margin-top: 16px; }
+        .collapsible-content.show { display: block; }
+        .warning-text { color: #f59e0b; font-size: 12px; }
+        .empty-state { color: #666; text-align: center; padding: 30px; }
+        hr { border-color: rgba(255,255,255,0.08); margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Mode Toggle -->
+    <div class="mode-switch">
+        <div id="commenterModeBtn" class="mode-btn active">💬 Commenter Mode</div>
+        <div id="creatorModeBtn" class="mode-btn">🎬 Creator Mode</div>
+    </div>
+
+    <!-- AI Toggle (Simulated vs Real Gemini) -->
+    <div class="ai-toggle">
+        <div id="simulatedAiBtn" class="ai-option active">🤖 Simulated AI</div>
+        <div id="realAiBtn" class="ai-option">✨ Real Gemini AI (Beta)</div>
+    </div>
+
+    <div class="post-card">
+        <div class="post-header">
+            <div class="avatar">🎮</div>
+            <div class="post-info">
+                <h3>GamingCreator</h3>
+                <p>50K subscribers • 2 hours ago</p>
+            </div>
+        </div>
+        <div class="post-thumbnail"></div>
+        <div class="post-title">🔥 My best Fortnite clutch moment! Watch until the end 🔥</div>
+    </div>
+
+    <!-- COMMENTER MODE -->
+    <div id="commenterView">
+        <div class="test-box">
+            <h3 style="color:white; margin-bottom:16px;">✍️ Comment as Guest</h3>
+            <textarea id="commentInput" rows="2" placeholder="Type a comment... Try: 'Great video!' or 'You're trash' or 'wow so talented 🙄'"></textarea>
+            <button class="post-btn" id="postCommentBtn">🔍 Post Comment - SafeScan AI</button>
+            <div id="aiFeedback" class="ai-feedback">💡 SafeScan will analyze your comment instantly</div>
+        </div>
+        <div class="comments-section">
+            <div class="section-title">💬 Comments</div>
+            <div id="commentsList"></div>
+        </div>
+    </div>
+
+    <!-- CREATOR MODE -->
+    <div id="creatorView" class="hidden-mode">
+        <div class="stats-grid">
+            <div class="stat-card red"><div class="stat-number" id="redCount">0</div><div class="stat-label">🔴 Deleted</div></div>
+            <div class="stat-card yellow"><div class="stat-number" id="yellowCount">0</div><div class="stat-label">🟡 Blurred</div></div>
+            <div class="stat-card green"><div class="stat-number" id="greenCount">0</div><div class="stat-label">🟢 Visible</div></div>
+        </div>
+
+        <div class="graph-container">
+            <h4 style="color:white;">📊 Moderation Trends</h4>
+            <canvas id="trendChart"></canvas>
+            <div class="insight-text">📉 Hate comments decreasing — community improving!</div>
+        </div>
+
+        <!-- RED Archive -->
+        <div class="collapsible-header" id="archiveHeader">
+            <span>🗑️ 🔴 DELETED COMMENTS ARCHIVE</span>
+            <span>▼</span>
+        </div>
+        <div class="collapsible-content" id="archiveContent">
+            <div class="warning-text">⚠️ These comments contain hate speech/spam. View for security audit only.</div>
+            <div id="redArchiveList"></div>
+        </div>
+
+        <hr>
+
+        <div class="comments-section">
+            <div class="section-title">🟡 Blurred Comments</div>
+            <div id="yellowList"></div>
+            <hr>
+            <div class="section-title">🟢 Visible Comments</div>
+            <div id="greenList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==================== DATA ====================
+    let useRealAI = false; // Start with simulated AI
+    
+    let comments = [
+        { id: 1, text: "Insane play! You're cracked!", username: "User123", flag: "GREEN", isBlurred: false, isDeleted: false, revealed: false },
+        { id: 2, text: "Your audio is lagging, fix it", username: "GameFan", flag: "YELLOW", isBlurred: true, isDeleted: false, revealed: false },
+        { id: 3, text: "What's your sensitivity settings?", username: "GamerGirl", flag: "GREEN", isBlurred: false, isDeleted: false, revealed: false },
+        { id: 4, text: "You're trash at this game", username: "Hater99", flag: "RED", isBlurred: false, isDeleted: true, revealed: false },
+        { id: 5, text: "wow so talented 🙄", username: "SarcasticGuy", flag: "YELLOW", isBlurred: true, isDeleted: false, revealed: false }
+    ];
+    
+    let redArchive = [
+        { id: 4, text: "You're trash at this game", username: "Hater99", deletedAt: new Date().toLocaleString(), reason: "Hate speech" }
+    ];
+    
+    let nextId = 6;
+    let nextArchiveId = 5;
+
+    // ==================== SIMULATED AI (Fallback) ====================
+    function simulatedAI(commentText) {
+        const lower = commentText.toLowerCase();
+        if (lower.includes("kill") || lower.includes("stupid") || lower.includes("idiot") || 
+            lower.includes("hate") || lower.includes("trash") || lower.includes("spam") || 
+            lower.includes("subscribe")) {
+            return { flag: "RED", reason: "Hate/spam detected", action: "delete" };
+        }
+        if (lower.includes("🙄") || lower.includes("wow") || lower.includes("so talented") || 
+            lower.includes("should") || lower.includes("but") || lower.includes("audio") || lower.includes("lag")) {
+            return { flag: "YELLOW", reason: "Possible sarcasm/criticism", action: "blur" };
+        }
+        return { flag: "GREEN", reason: "Safe comment", action: "visible" };
+    }
+
+    // ==================== REAL GEMINI API ====================
+    async function realGeminiAI(commentText, videoContext = "") {
+        try {
+            const response = await fetch('http://localhost:3000/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comment: commentText, videoContext: videoContext })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.flag === "RED") {
+                return { flag: "RED", reason: result.reason, action: "delete" };
+            } else if (result.flag === "YELLOW") {
+                return { flag: "YELLOW", reason: result.reason, action: "blur" };
+            } else {
+                return { flag: "GREEN", reason: result.reason, action: "visible" };
+            }
+        } catch (error) {
+            console.warn("Gemini API failed, falling back to simulated AI:", error);
+            document.getElementById("aiFeedback").innerHTML = "⚠️ Gemini API unavailable — using simulated AI";
+            return simulatedAI(commentText);
+        }
+    }
+
+    // ==================== MAIN AI FUNCTION (switches based on toggle) ====================
+    async function safeScanAI(commentText, videoContext = "") {
+        if (useRealAI) {
+            return await realGeminiAI(commentText, videoContext);
+        } else {
+            return simulatedAI(commentText);
+        }
+    }
+
+    // ==================== ADD COMMENT ====================
+    async function addComment(text, username = "GuestUser") {
+        const aiResult = await safeScanAI(text, "");
+        
+        if (aiResult.flag === "RED") {
+            redArchive.unshift({
+                id: nextArchiveId++,
+                text: text,
+                username: username,
+                deletedAt: new Date().toLocaleString(),
+                reason: aiResult.reason
+            });
+            renderAll();
+            return { success: false, message: `🔴 SafeScan (${useRealAI ? 'Gemini' : 'Simulated'}) deleted: ${aiResult.reason}` };
+        }
+        
+        comments.push({
+            id: nextId++,
+            text: text,
+            username: username,
+            flag: aiResult.flag,
+            isBlurred: (aiResult.flag === "YELLOW"),
+            isDeleted: false,
+            revealed: false
+        });
+        
+        renderAll();
+        return { success: true, message: `🟢 Comment posted | ${aiResult.flag}: ${aiResult.reason}` };
+    }
+
+    // ==================== REVIEW ACTIONS ====================
+    function toggleReveal(id) {
+        const comment = comments.find(c => c.id === id);
+        if (comment) { comment.revealed = !comment.revealed; renderCreatorMode(); }
+    }
+
+    function approveComment(id) {
+        const comment = comments.find(c => c.id === id);
+        if (comment) { comment.flag = "GREEN"; comment.isBlurred = false; comment.revealed = false; renderAll(); }
+    }
+
+    function deleteComment(id) {
+        const comment = comments.find(c => c.id === id);
+        if (comment) {
+            redArchive.unshift({
+                id: nextArchiveId++,
+                text: comment.text,
+                username: comment.username,
+                deletedAt: new Date().toLocaleString(),
+                reason: "Manually deleted by creator"
+            });
+            comment.isDeleted = true;
+            renderAll();
+        }
+    }
+
+    function clearArchive() {
+        if (confirm("⚠️ Permanently delete ALL archived comments?")) {
+            redArchive = [];
+            renderArchive();
+        }
+    }
+
+    // ==================== RENDER FUNCTIONS ====================
+    function renderAll() {
+        renderCommenterMode();
+        renderCreatorMode();
+        renderArchive();
+        updateStatsAndGraph();
+    }
+
+    function renderCommenterMode() {
+        const container = document.getElementById("commentsList");
+        if (!container) return;
+        const visible = comments.filter(c => !c.isDeleted && c.flag !== "RED");
+        if (visible.length === 0) { container.innerHTML = "<div class='empty-state'>No comments yet.</div>"; return; }
+        container.innerHTML = visible.map(c => `
+            <div class="comment ${c.flag === 'GREEN' ? 'green' : 'yellow'}">
+                <div class="comment-header">
+                    <span class="comment-user">${escapeHtml(c.username)}</span>
+                    <span class="comment-badge ${c.flag === 'GREEN' ? 'green' : 'yellow'}">${c.flag === 'GREEN' ? '🟢 GREEN' : '🟡 YELLOW'}</span>
+                </div>
+                <div class="comment-text ${c.isBlurred ? 'blurred' : ''}">${escapeHtml(c.text)}</div>
+            </div>
+        `).join("");
+    }
+
+    function renderCreatorMode() {
+        const yellowContainer = document.getElementById("yellowList");
+        const greenContainer = document.getElementById("greenList");
+        if (!yellowContainer || !greenContainer) return;
+        
+        const yellow = comments.filter(c => !c.isDeleted && c.flag === "YELLOW");
+        const green = comments.filter(c => !c.isDeleted && c.flag === "GREEN");
+        
+        yellowContainer.innerHTML = yellow.length === 0 ? "<div class='empty-state'>No blurred comments.</div>" :
+            yellow.map(c => `<div class="comment yellow">
+                <div class="comment-header"><span class="comment-user">${escapeHtml(c.username)}</span><span class="comment-badge yellow">🟡 YELLOW</span></div>
+                <div class="comment-text ${!c.revealed ? 'blurred' : ''}">${escapeHtml(c.text)}</div>
+                <div class="review-actions">
+                    <button class="review-btn unblur" onclick="toggleReveal(${c.id})">👁️ ${c.revealed ? 'Hide' : 'Unblur'}</button>
+                    <button class="review-btn approve" onclick="approveComment(${c.id})">✅ Approve</button>
+                    <button class="review-btn delete" onclick="deleteComment(${c.id})">🗑️ Delete</button>
+                </div>
+            </div>`).join("");
+        
+        greenContainer.innerHTML = green.length === 0 ? "<div class='empty-state'>No visible comments.</div>" :
+            green.map(c => `<div class="comment green">
+                <div class="comment-header"><span class="comment-user">${escapeHtml(c.username)}</span><span class="comment-badge green">🟢 GREEN</span></div>
+                <div class="comment-text">${escapeHtml(c.text)}</div>
+            </div>`).join("");
+    }
+
+    function renderArchive() {
+        const container = document.getElementById("redArchiveList");
+        if (!container) return;
+        if (redArchive.length === 0) { container.innerHTML = "<div class='empty-state'>No deleted comments.</div>"; return; }
+        container.innerHTML = redArchive.map(a => `
+            <div class="comment red-archive">
+                <div class="comment-header"><span class="comment-user">🔴 ${escapeHtml(a.username)}</span><span class="comment-badge red">DELETED</span></div>
+                <div class="comment-text">${escapeHtml(a.text)}</div>
+                <div style="font-size: 11px; color: #888;">🗑️ ${a.deletedAt} | ${a.reason}</div>
+            </div>
+        `).join("");
+    }
+
+    function updateStatsAndGraph() {
+        document.getElementById("redCount").innerText = redArchive.length;
+        document.getElementById("yellowCount").innerText = comments.filter(c => !c.isDeleted && c.flag === "YELLOW").length;
+        document.getElementById("greenCount").innerText = comments.filter(c => !c.isDeleted && c.flag === "GREEN").length;
+    }
+
+    // Graph
+    let chart = null;
+    function drawChart() {
+        const ctx = document.getElementById('trendChart')?.getContext('2d');
+        if (!ctx) return;
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [
+                    { label: '🔴 Deleted', data: [8, 7, 6, 5, 4, 3, 2], backgroundColor: '#ef4444', borderRadius: 8 },
+                    { label: '🟡 Blurred', data: [5, 6, 5, 7, 6, 5, 4], backgroundColor: '#f59e0b', borderRadius: 8 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#fff' } } }, scales: { y: { ticks: { color: '#fff' } }, x: { ticks: { color: '#fff' } } } }
+        });
+    }
+
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
+
+    // ==================== MODE TOGGLE ====================
+    function setMode(mode) {
+        const commenterView = document.getElementById("commenterView");
+        const creatorView = document.getElementById("creatorView");
+        const commenterBtn = document.getElementById("commenterModeBtn");
+        const creatorBtn = document.getElementById("creatorModeBtn");
+        
+        if (mode === "commenter") {
+            commenterView.classList.remove("hidden-mode");
+            creatorView.classList.add("hidden-mode");
+            commenterBtn.classList.add("active");
+            creatorBtn.classList.remove("active");
+        } else {
+            commenterView.classList.add("hidden-mode");
+            creatorView.classList.remove("hidden-mode");
+            commenterBtn.classList.remove("active");
+            creatorBtn.classList.add("active");
+            renderCreatorMode();
+        }
+    }
+
+    // ==================== AI TOGGLE ====================
+    function setAIMode(useReal) {
+        useRealAI = useReal;
+        const simulatedBtn = document.getElementById("simulatedAiBtn");
+        const realBtn = document.getElementById("realAiBtn");
+        
+        if (useReal) {
+            realBtn.classList.add("active");
+            simulatedBtn.classList.remove("active");
+            document.getElementById("aiFeedback").innerHTML = "✨ Real Gemini AI is ACTIVE. Make sure backend is running on localhost:3000";
+        } else {
+            simulatedBtn.classList.add("active");
+            realBtn.classList.remove("active");
+            document.getElementById("aiFeedback").innerHTML = "🤖 Simulated AI active. Toggle to use real Gemini API.";
+        }
+    }
+
+    // ==================== EVENT LISTENERS ====================
+    document.getElementById("commenterModeBtn")?.addEventListener("click", () => setMode("commenter"));
+    document.getElementById("creatorModeBtn")?.addEventListener("click", () => setMode("creator"));
+    document.getElementById("simulatedAiBtn")?.addEventListener("click", () => setAIMode(false));
+    document.getElementById("realAiBtn")?.addEventListener("click", () => setAIMode(true));
+    
+    document.getElementById("postCommentBtn")?.addEventListener("click", async () => {
+        const input = document.getElementById("commentInput");
+        const text = input.value.trim();
+        if (!text) { document.getElementById("aiFeedback").innerHTML = "⚠️ Type a comment first."; return; }
+        
+        document.getElementById("aiFeedback").innerHTML = "⏳ Analyzing with " + (useRealAI ? "Gemini AI..." : "Simulated AI...");
+        const result = await addComment(text, "GuestUser");
+        document.getElementById("aiFeedback").innerHTML = result.message;
+        input.value = "";
+    });
+    
+    document.getElementById("archiveHeader")?.addEventListener("click", () => {
+        const content = document.getElementById("archiveContent");
+        content.classList.toggle("show");
+    });
+    
+    renderAll();
+    setMode("commenter");
+    drawChart();
+</script>
+</body>
+</html>
